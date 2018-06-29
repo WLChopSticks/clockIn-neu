@@ -20,7 +20,7 @@ username = ''
 password = ''
 cookie = ''
 retry_count = 5
-
+notice_string = ''
 
 
 def getCaptcha():
@@ -156,11 +156,13 @@ def checkSuccess(response):
 
     print(currenttime)
     print(last_record_time)
+    global notice_string
     if int(currenttime) - int(last_record_time) < 30 and int(currenttime) - int(last_record_time) >= 0:
         print(username + ' 打卡成功')
+        notice_string = notice_string + username + '打卡成功\n'
     else:
         print(username + ' 打卡失败')
-
+        notice_string = notice_string + username + '打卡失败\n'
 
 def start():
     for key, value in users.items():
@@ -171,6 +173,12 @@ def start():
         print(username)
         print(password)
         prepareParamters(username, password)
+
+def sendNotification():
+    sec_key = '2744-e874d4130b17169d7cbd4b0b986f40a0'
+    notice_url = 'https://pushbear.ftqq.com/sub?sendkey=' + sec_key + '&text=clock_in_result&desp=' + notice_string
+    requests.get(notice_url)
+
 
 if __name__ == "__main__":
 
@@ -183,10 +191,12 @@ if __name__ == "__main__":
         if not day_record and current_time - 81000 > 0 and 81330 - current_time > 0:
             print('早上打卡开始')
             start()
+            sendNotification()
             day_record = True
         elif not night_record and current_time - 173100 > 0 and 173430 - current_time > 0:
             print('晚上打卡开始')
             start()
+            sendNotification()
             night_record = True
 
         else:
@@ -195,6 +205,8 @@ if __name__ == "__main__":
             night_record = False
             global retry_count
             retry_count = 5
+            global notice_string
+            notice_string = ''
 
         #延时
         for i in range(1,18):
