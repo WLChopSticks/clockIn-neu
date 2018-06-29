@@ -9,34 +9,28 @@ import datetime
 import time
 
 users = {
-    
+
+}
+
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36"
 }
 
 username = ''
 password = ''
+cookie = ''
+retry_count = 5
 
 
 
-
-def getCaptcha(cookie):
+def getCaptcha():
     # 获取验证码图片
     image_url = 'http://kq.neusoft.com/imageRandeCode'
-    image_header = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36",
-        # 'Cache-Control' : 'max-age=0',
-        # 'Upgrade-Insecure-Requests' : '1',
-        # 'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        # 'Origin' : 'http://kq.neusoft.com',
-        # 'Refer' : 'http://kq.neusoft.com/index.jsp',
-        # 'Content-Type' : 'application/x-www-form-urlencoded',
-        # 'Connection' : 'keep-alive',
-        'Cookie': 'JSESSIONID=' + cookie}
-    response = requests.get(image_url, headers=image_header)
-    # response = requests.get(image_url)
+    headers['Cookie'] = cookie
+
+    response = requests.get(image_url, headers=headers)
     with open('captchar.jpg', 'wb') as f:
         f.write(response.content)
-
-
 
     im = Image.open('captchar.jpg')
     enhancer = ImageEnhance.Color(im)
@@ -49,7 +43,8 @@ def getCaptcha(cookie):
     im = enhancer.enhance(20)
     with open('newcaptchar.jpg', 'wb') as f:
         f.write(response.content)
-    captcha = pytesseract.image_to_string(im)
+
+    #识别验证码
     captcha = pytesseract.image_to_string(im, config="-psm 8 -c tessedit_char_whitelist=1234567890")
     print(captcha)
     return captcha
@@ -58,11 +53,9 @@ def prepareParamters(username, password):
 
     time.sleep(2)
     login_page_url = 'http://kq.neusoft.com/index.jsp'
-    headers = {"User-Agent" : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36"}
     response = requests.get(url=login_page_url, headers = headers)
 
     html = etree.HTML(response.text)
-
     with open(r'source.txt','w') as f_tem:
         f_tem.write(response.text)
 
@@ -72,9 +65,8 @@ def prepareParamters(username, password):
     username_key = textfield_name_list[0]
     password_key = textfield_name_list[1]
 
-    captcha_name_list = html.xpath('//input[@class="a"]/@name')
-
     #获取验证码的html 名称
+    captcha_name_list = html.xpath('//input[@class="a"]/@name')
     captcha_key = captcha_name_list[0]
 
     #获取neusoft_key
@@ -85,14 +77,14 @@ def prepareParamters(username, password):
     key_list = html.xpath('//input[contains(@name,"KEY")]')[0]
     key = key_list.attrib['name']
 
-
     #获取cookie
+    global cookie
     cookie = username_key.replace('ID',"")
     pattern = re.compile('(.+)!')
-    cookie = pattern.findall(cookie)[0]
+    cookie = 'JSESSIONID=' + pattern.findall(cookie)[0]
 
     #获取验证码
-    captcha = getCaptcha(cookie)
+    captcha = getCaptcha()
 
     # aptcha = input("请输入验证码")
 
@@ -105,18 +97,7 @@ def prepareParamters(username, password):
         'Refer': 'http://kq.neusoft.com/index.jsp',
         'Content-Type': 'application/x-www-form-urlencoded',
         'Connection': 'keep-alive',
-        'Cookie': 'JSESSIONID=' + cookie}
-
-    plain_header = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36",
-        # 'Cache-Control' : 'max-age=0',
-        # 'Upgrade-Insecure-Requests' : '1',
-        # 'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        # 'Origin' : 'http://kq.neusoft.com',
-        # 'Refer' : 'http://kq.neusoft.com/index.jsp',
-        # 'Content-Type' : 'application/x-www-form-urlencoded',
-        # 'Connection' : 'keep-alive',
-        'Cookie': 'JSESSIONID=' + cookie}
+        'Cookie': cookie}
 
     data = {'login' : 'true',
             'neusoft_attendance_online' : '',
@@ -127,22 +108,26 @@ def prepareParamters(username, password):
             captcha_key : captcha}
     form_data = urllib.parse.urlencode(data)
 
-    login(data, login_header, plain_header)
+    login(data, login_header)
     # print(form_data)
 
 
 
-def login(data, login_header, plain_header):
-
+def login(data, login_header):
+    print('开始登陆流程')
     login_url = 'http://kq.neusoft.com/login.jsp?'
     response = requests.post(login_url, data=data, headers=login_header, allow_redirects=False)
     #返回code302 进行跳转
     attendance_url = 'http://kq.neusoft.com/attendance.jsp'
+    headers['Cookie'] = cookie
     if response.text.find('http://kq.neusoft.com/attendance.jsp') != -1:
-        response = requests.get('http://kq.neusoft.com/attendance.jsp', headers=plain_header)
+        response = requests.get('http://kq.neusoft.com/attendance.jsp', headers=headers)
     else:
         # 如果登录失败, 则需要重新进行逻辑
-        prepareParamters(username, password)
+        if retry_count > 0:
+            global retry_count
+            retry_count -= 1
+            prepareParamters(username, password)
         return
 
     html = etree.HTML(response.text)
@@ -152,9 +137,11 @@ def login(data, login_header, plain_header):
     #打卡流程
     record_url = 'http://kq.neusoft.com/record.jsp'
     data = {'currentempoid' : currentempoid}
-    response = requests.post(record_url, headers = plain_header, data=data, allow_redirects=False)
+    response = requests.post(record_url, headers = headers, data=data, allow_redirects=False)
     if response.text.find('http://kq.neusoft.com/attendance.jsp') != -1:
-        response = requests.get('http://kq.neusoft.com/attendance.jsp', headers=plain_header)
+        response = requests.get('http://kq.neusoft.com/attendance.jsp', headers=headers)
+
+    #检测打卡是否成功
     checkSuccess(response)
 
 
@@ -206,6 +193,8 @@ if __name__ == "__main__":
             print('loading...')
             day_record = False
             night_record = False
+            global retry_count
+            retry_count = 5
 
         #延时
         for i in range(1,18):
