@@ -124,10 +124,13 @@ def login(data, login_header):
         response = requests.get('http://kq.neusoft.com/attendance.jsp', headers=headers)
     else:
         # 如果登录失败, 则需要重新进行逻辑
+        global retry_count
         if retry_count > 0:
-            global retry_count
             retry_count -= 1
             prepareParamters(username, password)
+        else:
+            global notice_string
+            notice_string += username + '打卡失败 \n'
         return
 
     html = etree.HTML(response.text)
@@ -159,10 +162,10 @@ def checkSuccess(response):
     global notice_string
     if int(currenttime) - int(last_record_time) < 30 and int(currenttime) - int(last_record_time) >= 0:
         print(username + ' 打卡成功')
-        notice_string = notice_string + username + '打卡成功\n'
+        notice_string = notice_string + username + '打卡成功 \n'
     else:
         print(username + ' 打卡失败')
-        notice_string = notice_string + username + '打卡失败\n'
+        notice_string = notice_string + username + '打卡失败 \n'
 
 def start():
     for key, value in users.items():
@@ -179,42 +182,60 @@ def sendNotification():
     notice_url = 'https://pushbear.ftqq.com/sub?sendkey=' + sec_key + '&text=clock_in_result&desp=' + notice_string
     requests.get(notice_url)
 
+def clockin_loop(day_night_stop, night_day_stop):
 
-if __name__ == "__main__":
-
-    day_record = False
-    night_record = False
     while True:
-        print(night_record)
         current_time = int(datetime.datetime.now().strftime('%H%M%S'))
         print(str(current_time))
-        if not day_record and current_time - 81000 > 0 and 81330 - current_time > 0:
+        if current_time - 81000 > 0 and 81330 - current_time > 0:
             print('早上打卡开始')
             start()
             sendNotification()
-            day_record = True
-        elif not night_record and current_time - 173100 > 0 and 173430 - current_time > 0:
+            #如果选择晚早打卡, 则早上打卡后停止
+            if night_day_stop:
+                break
+        elif current_time - 203100 > 0 and 203430 - current_time > 0:
             print('晚上打卡开始')
             start()
             sendNotification()
-            night_record = True
-
+            # 如果选择早晚打卡, 则晚上打卡后停止
+            if day_night_stop:
+                break
         else:
             print('loading...')
-            day_record = False
-            night_record = False
             global retry_count
             retry_count = 5
             global notice_string
             notice_string = ''
 
-        #延时
-        for i in range(1,18):
+        # 延时
+        for i in range(1, 18):
             print('loading...')
             time.sleep(10)
         time.sleep(6)
 
     print('打卡完毕')
+
+if __name__ == "__main__":
+
+    clock_day_night = False
+    clock_night_day = False
+    while True:
+        print('请选择要打卡的方式:')
+        print('1.打早晚卡')
+        print('2.打晚早卡')
+
+        input_value = input('请输入您的选择:')
+        if input_value == '1':
+            clock_day_night = True
+            clockin_loop(True, False)
+        elif input_value == '2':
+            clock_night_day = True
+            clockin_loop(False,True)
+        else:
+            print('请重新输入...')
+
+
 
 
 
